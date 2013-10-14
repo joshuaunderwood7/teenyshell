@@ -1,5 +1,6 @@
 //#include <stdlib.h>
 #include <iostream>
+#include <fstream>
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
@@ -18,6 +19,11 @@ namespace teenyshell
     
 int makeSystemCall(const int argc, char* argv[])
 {
+    for (int i = 0; i < argc; i++) {
+        std::cout << argv[i];
+    }
+    std::cout  << std::endl;
+
     //changing directories requires special call
     if(strcmp(argv[0], "cd")==0)
     {
@@ -38,47 +44,122 @@ int makeSystemCall(const int argc, char* argv[])
     { std::cerr << "Teenyshell: Command does not exist" << std::endl; return 1; }
 
     int fds[2];
-    int prev = 0;
     bool piped = false;
     int oldin, oldout;
     for (int i = 0; i < argc; i++) 
     {
         if(strcmp("|", argv[i])==0)
         {
-            pipe(fds);
             piped = true;
-            argv[i] = NULL;
-            oldout = dup(STDOUT_FILENO);
-            dup2(fds[1], STDOUT_FILENO);
-            close(fds[0]);
-            makeSystemCall((i- prev), (argv + prev));
-            
-        dup2(oldout, STDOUT_FILENO);
-        close(oldout);
-            
-            close(fds[1]);
+            int prev = 0;
+
+            char* callToMakeToo;
+            char** argv1;
+            char** argv2;
+            int argc1, argc2;
+
+            argv1 = argv;
+            argc1 = (i);
+            argv[i] = NULL; //Turn pipe into null to terminate argv1
+
             prev = i + 1;
+            argv2 = (argv + prev); 
+            callToMakeToo = doesProgramExistc(*(argv + prev));
+            argc2 = (argc - prev);
+
+            returncode = createPipe(argc1, callToMake, argv1, argc2, callToMakeToo, argv2);
+            delete callToMakeToo;
+            i = argc;
+        }
+        else if(strcmp("<", argv[i])==0)
+        {
+            piped = true;
+            int prev = 0;
+
+            char** argv1;
+            char* argv2[2];
+            int argc1, argc2;
+
+            argv1 = argv;
+            argc1 = (i);
+            argv[i] = NULL; //Turn carrot into null to terminate argv1
+
+            char* callToMakeToo;
+            strcpy(callToMakeToo, "/bin/cat");
+            argv2[0] = callToMakeToo;
+            argv2[1] = argv[i+1]; 
+            argv2[2] = NULL; 
+            argc2 = (3);
+
+            returncode = createPipe(argc1, callToMake, argv1, argc2, callToMakeToo, argv2);
+            i = argc;
+            delete argv2[0];
+        }
+        else if(strcmp(">", argv[i])==0)
+        {
+            piped = true;
+            int prev = 0;
+
+            char** argv1;
+            int argc1;
+
+            argv1 = argv;
+            argc1 = (i);
+            argv[i] = NULL; //Turn carrot into null to terminate argv1
+
+            char* filename = argv[i+1];
+
+            returncode = createFile(argc1, callToMake, argv1, filename);
+            i = argc;
         }
     }
-    if(piped) 
+    if(!piped) 
     { 
-        oldin = dup(STDIN_FILENO);
-        dup2(fds[0], STDIN_FILENO);
-        close(fds[1]);
-        makeSystemCall((argc-prev), (argv + prev)); 
-        close(fds[0]);
-
-        dup2(oldin,  STDIN_FILENO);
-        dup2(oldout, STDOUT_FILENO);
-        close(oldout);
-        close(oldin);
+        //std::cout << "Inside a normal call" << std::endl;
+        returncode = createProcess(argc, callToMake, argv); 
     }
-    else      
-    { returncode = createProcess(argc, callToMake, argv); }
 
 
     delete callToMake;
     return returncode;
+}
+
+int createPipe(const int argc1, const char* path1, char* argv1[], const int argc2, const char* path2, char* argv2[])
+{
+    //make the pipe
+    int pipefd[2];
+    if (pipe(pipefd) == -1) 
+    {
+        perror("pipe");
+        return 2;
+    }
+
+    //make the fork
+    pid_t pid  = fork();
+    if (pid == -1) // is there an error with the fork?
+    {
+            perror("fork"); 
+            return 1;
+    }
+
+
+    // ---- by when you get here there will be two processes
+    if (pid == 0) // child process
+    {
+        close(pipefd[0]);       //child close the input of the pipe
+        dup2(pipefd[1], 1);     //duplicate output side of pipe to stdout
+        execvp(path1, argv1);    //call the first (left of pipe)  process
+        pthread_exit(0);                        //End thread when syscall is over 
+    }
+    else // parent process
+    {
+        close(pipefd[1]);       //parent close the output end of pipe
+        //dup2(pipefd[0], 0);     //duplicate input side of pipe to stdin
+        wait(NULL); //Wait for child process to end
+        createProcess(argc2, path2, argv2);    //call the first (left of pipe) process
+    }
+    
+    return 0;
 }
 
 int createProcess(const int argc, const char* path, char* argv[])
@@ -92,7 +173,7 @@ int createProcess(const int argc, const char* path, char* argv[])
     // ---- by when you get here there will be two processes
     if (pid == 0) // child process
     {
-        execv(path, argv);
+        execvp(path, argv);
         pthread_exit(0);                        //End thread when syscall is over }
     }
     else // parent process
@@ -103,6 +184,53 @@ int createProcess(const int argc, const char* path, char* argv[])
     return 0;
 }
 
+int createFile(const int argc1, const char* path1, char* argv1[], char* filename)
+{
+    char theOutput[STANDARD_STRING_LENGTH];
+    //make the pipe
+    int pipefd[2];
+    if (pipe(pipefd) == -1) 
+    {
+        perror("pipe");
+        return 2;
+    }
+
+    //make the fork
+    pid_t pid  = fork();
+    if (pid == -1) // is there an error with the fork?
+    {
+            perror("fork"); 
+            return 1;
+    }
+
+
+    // ---- by when you get here there will be two processes
+    if (pid == 0) // child process
+    {
+        close(pipefd[0]);       //child close the input of the pipe
+        dup2(pipefd[1], 1);     //duplicate output side of pipe to stdout
+        execvp(path1, argv1);    //call the first (left of pipe)  process
+        pthread_exit(0);                        //End thread when syscall is over 
+    }
+    else // parent process
+    {
+        char theOutput[STANDARD_STRING_LENGTH*4];
+        std::ofstream outFile;
+        outFile.open(filename, std::fstream::ate);
+
+        close(pipefd[1]);       //parent close the output end of pipe
+        //dup2(0, pipefd[0]);     //duplicate input side of pipe to stdin
+        wait(NULL); //Wait for child process to end
+//        std::cout << "about to read from the pipe" << std::endl;
+        int nbytes = read(pipefd[0], theOutput, sizeof(theOutput));
+//        std::cout << theOutput  << " was read from pipe"<< std::endl;
+        for (int i = 0; theOutput[i] != 0 ; i++) {
+            outFile.put(theOutput[i]);
+        }
+    }
+    
+    return 0;
+}
 
 char** parsePathc(char ** paths)
 {
@@ -121,7 +249,7 @@ char** parsePathc(char ** paths)
             ++pathc;
         }
     }
-//    std::cout << "pathc: " << pathc << std::endl;
+    //std::cout << "pathc: " << pathc << std::endl;
     
     //fills the arguments
     paths = new char*[pathc + 1];
@@ -163,6 +291,7 @@ char* getCommandc(void)
 
 char** parseCommandc(char* command, int &argc, char* argv[])
 {
+    //std::cin.sync();
     char tempstr[STANDARD_STRING_LENGTH] = "";
 
     //remove whitespace from parseCommand to keep string const
