@@ -12,6 +12,15 @@ int main(int argc, const char *argv[])
     
     std::cout << "Welcome to teenyshell\n"
               << "Written by Joshua Underwood\n"
+              << "\n"
+              << "******************************\n"
+              << "*Warning, the left carrot \"<\"*\n"
+              << "*will cause a seg fault      *\n"
+              << "*and the pipe \"|\" does not   *\n"
+              << "*work, should not crash.     *\n"
+              << "*wc and grep also do not work*\n"
+              << "*and will crash shell.       *\n"
+              << "******************************\n"
               << "\n";
 
     char command[1024];

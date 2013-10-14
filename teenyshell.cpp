@@ -19,10 +19,6 @@ namespace teenyshell
     
 int makeSystemCall(const int argc, char* argv[])
 {
-    for (int i = 0; i < argc; i++) {
-        std::cout << argv[i];
-    }
-    std::cout  << std::endl;
 
     //changing directories requires special call
     if(strcmp(argv[0], "cd")==0)
@@ -115,7 +111,6 @@ int makeSystemCall(const int argc, char* argv[])
     }
     if(!piped) 
     { 
-        //std::cout << "Inside a normal call" << std::endl;
         returncode = createProcess(argc, callToMake, argv); 
     }
 
@@ -216,14 +211,12 @@ int createFile(const int argc1, const char* path1, char* argv1[], char* filename
     {
         char theOutput[STANDARD_STRING_LENGTH*4];
         std::ofstream outFile;
-        outFile.open(filename, std::fstream::ate);
+        outFile.open(filename, std::fstream::app);
 
         close(pipefd[1]);       //parent close the output end of pipe
         //dup2(0, pipefd[0]);     //duplicate input side of pipe to stdin
         wait(NULL); //Wait for child process to end
-//        std::cout << "about to read from the pipe" << std::endl;
         int nbytes = read(pipefd[0], theOutput, sizeof(theOutput));
-//        std::cout << theOutput  << " was read from pipe"<< std::endl;
         for (int i = 0; theOutput[i] != 0 ; i++) {
             outFile.put(theOutput[i]);
         }
@@ -249,7 +242,6 @@ char** parsePathc(char ** paths)
             ++pathc;
         }
     }
-    //std::cout << "pathc: " << pathc << std::endl;
     
     //fills the arguments
     paths = new char*[pathc + 1];
@@ -263,7 +255,6 @@ char** parsePathc(char ** paths)
     {
         paths[i] = new char[strlen(token+1)];
         std::strcpy(paths[i], token);
-//        std::cout << "paths[" << i << "]: " << paths[i] << std::endl;
         temp = strtok(NULL, ":");
         if(temp != NULL) { strcpy(token, temp); }
     }
@@ -297,7 +288,6 @@ char** parseCommandc(char* command, int &argc, char* argv[])
     //remove whitespace from parseCommand to keep string const
     while(strlen(command) > 0 && command[0] == ' ' || command[0] == '\t') 
     { 
-//        std::cout << "Removing whitespace...\n";
         size_t n = strlen(command);         //varify that this will copy the null termination
         strncpy(tempstr, &(command[1]), n);
         strcpy(command, tempstr);
@@ -317,7 +307,6 @@ char** parseCommandc(char* command, int &argc, char* argv[])
             ++argc;
         }
     }
-//    std::cout << "argc: " << argc << std::endl;
     
     //fills the arguments
     argv = new char*[argc + 1];
@@ -332,7 +321,6 @@ char** parseCommandc(char* command, int &argc, char* argv[])
     {
         argv[i] = new char[strlen(token+1)];
         std::strcpy(argv[i], token);
-//        std::cout << "argv[" << i << "]: " << argv[i] << std::endl;
         temp = strtok(NULL, " \t");
         if(temp != NULL) { strcpy(token, temp); }
     }
@@ -364,7 +352,6 @@ char* doesProgramExistc(const char* progName)
         strcpy(temp, paths[i]);
         strcat(temp, "/");
         strcat(temp, progName);
-//        std::cout << "The path and program are: " << temp << std::endl;
         if(stat(temp, &st) == 0)
         {
             //clean up paths.
